@@ -9,18 +9,27 @@
 import UIKit
 import CoreData
 
-class ViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, NSFetchedResultsControllerDelegate {
+class ViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, NSFetchedResultsControllerDelegate,
+TaskDetailViewControllerDelegate, AddTaskViewControllerDelegate
+{
     
-    let managedObjectContext  = (UIApplication.sharedApplication().delegate as AppDelegate).managedObjectContext!
     var fetchedResultsController: NSFetchedResultsController = NSFetchedResultsController()
     @IBOutlet weak var tableView: UITableView!
     //var taskArray:[TaskModel] = []
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        self.view.backgroundColor = UIColor(patternImage: UIImage(named: "Background")!)
+        
+        
+        
        fetchedResultsController = getFetchedResultsController()
        fetchedResultsController.delegate = self
        fetchedResultsController.performFetch(nil)
+        
+        NSNotificationCenter.defaultCenter().addObserver(self, selector: "iCloudUpdated", name: "coreDataUpdated", object: nil)
+        //    NSNotificationCenter.defaultCenter().addObserver(self, selector: "icloudUpdated", name: "coreDataUpdated", object: nil)
+
         // Do any additional setup after loading the view, typically from a nib.
     }
 
@@ -36,15 +45,15 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
     
     override func prepareForSegue(segue: UIStoryboardSegue, sender: AnyObject?) {
     if segue.identifier == "showTaskDetail" {
-        let detailVC: TaskDetailViewController = segue.destinationViewController as TaskDetailViewController
+        let detailVC: TaskDetailViewController = segue.destinationViewController as! TaskDetailViewController
         let indexPath = self.tableView.indexPathForSelectedRow()
-        let thisTask = fetchedResultsController.objectAtIndexPath(indexPath!) as TaskModel
+        let thisTask = fetchedResultsController.objectAtIndexPath(indexPath!) as! TaskModel
         detailVC.detailTaskModel = thisTask
-        
+        detailVC.delegate = self
         }
         if segue.identifier == "showTaskAdd" {
-            let addTaskVC: AddTaskViewController = segue.destinationViewController as AddTaskViewController
-            
+            let addTaskVC: AddTaskViewController = segue.destinationViewController as! AddTaskViewController
+            addTaskVC.delegate = self
         }
     }
 
@@ -65,8 +74,8 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
     
      func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
         
-        var cell:TaskCell  = tableView.dequeueReusableCellWithIdentifier("myCell") as TaskCell
-        let thisTask = fetchedResultsController.objectAtIndexPath(indexPath) as TaskModel
+        var cell:TaskCell  = tableView.dequeueReusableCellWithIdentifier("myCell")as! TaskCell
+        let thisTask = fetchedResultsController.objectAtIndexPath(indexPath)as! TaskModel
         
         cell.descriptionLabel.text = thisTask.subtask
         cell.dateLabel.text = Date.toString(date: thisTask.date)
@@ -88,7 +97,7 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
     func tableView(tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
         if fetchedResultsController.sections?.count == 1 {
             let fetchedObjects = fetchedResultsController.fetchedObjects!
-            let testTask:TaskModel = fetchedObjects[0] as TaskModel
+            let testTask:TaskModel = fetchedObjects[0]as! TaskModel
             if testTask.completed == true {
                 return "Completed"
             }
@@ -117,8 +126,12 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         }
     }
     
+    func tableView(tableView: UITableView, willDisplayCell cell: UITableViewCell, forRowAtIndexPath indexPath: NSIndexPath) {
+        cell.backgroundColor = UIColor.clearColor()
+    }
+    
      func tableView(tableView: UITableView, commitEditingStyle editingStyle: UITableViewCellEditingStyle, forRowAtIndexPath indexPath: NSIndexPath) {
-        let thisTask = fetchedResultsController.objectAtIndexPath(indexPath) as TaskModel
+        let thisTask = fetchedResultsController.objectAtIndexPath(indexPath) as! TaskModel
         
 //        if (indexPath.section == 0 && isAllCompleted()) || (indexPath.section == 1){
 //            thisTask.completed = false
@@ -135,8 +148,7 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
             thisTask.completed = true
         }
         
-        (UIApplication.sharedApplication().delegate as AppDelegate).saveContext()
-
+        ModelManager.instance.saveContext()
         tableView.reloadData()
     }
     
@@ -145,7 +157,7 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
     }
     
     func tableView(tableView: UITableView, editActionsForRowAtIndexPath indexPath: NSIndexPath) -> [AnyObject]? {
-        let thisTask = fetchedResultsController.objectAtIndexPath(indexPath) as TaskModel
+        let thisTask = fetchedResultsController.objectAtIndexPath(indexPath) as! TaskModel
        // var newTask = TaskModel(task: thisTask.task, subTask: thisTask.subtask, date: thisTask.date, completed: !thisTask.completed)
         var completeAction:UITableViewRowAction = UITableViewRowAction(style: UITableViewRowActionStyle.Default, title: "Complete", handler: { (tvra:UITableViewRowAction!, indexPath:NSIndexPath!) -> Void in
            // self.baseArray[indexPath.section].removeAtIndex(indexPath.row)
@@ -189,7 +201,7 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
     }
     
     func getFetchedResultsController() -> NSFetchedResultsController {
-        fetchedResultsController = NSFetchedResultsController(fetchRequest: taskFetchRequest(), managedObjectContext: managedObjectContext, sectionNameKeyPath: "completed", cacheName: nil)
+        fetchedResultsController = NSFetchedResultsController(fetchRequest: taskFetchRequest(), managedObjectContext: ModelManager.instance.managedObjectContext!, sectionNameKeyPath: "completed", cacheName: nil)
         return fetchedResultsController
     }
     
@@ -220,11 +232,37 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         if fetchedResultsController.sections!.count == 1 {
             if fetchedResultsController.sections![0].numberOfObjects > 0 {
                 var indexPath = NSIndexPath(forItem: 0, inSection: 0)
-                var task = fetchedResultsController.objectAtIndexPath(indexPath) as TaskModel
+                var task = fetchedResultsController.objectAtIndexPath(indexPath ) as! TaskModel
                 ret = task.completed.boolValue
             }
         }
         return ret
+    }
+    
+    // TaskDetailViewControllerDelegate
+    
+    func taskDetailEdited() {
+        showAlert()
+    }
+    
+    func addTaskCanceled(message: String) {
+        showAlert(message : message)
+    }
+    
+    func addTask(message: String) {
+        showAlert(message : message)
+    }
+    
+    func showAlert (message: String = "Congratulations") {
+        var alert = UIAlertController(title: "Change Made!", message: message, preferredStyle: UIAlertControllerStyle.Alert)
+        alert.addAction(UIAlertAction(title: "Ok!", style: UIAlertActionStyle.Default, handler: nil))
+        self.presentViewController(alert, animated: true, completion: nil)
+    }
+    
+    // i Cloud Notification
+    
+    func iCloudUpdated() {
+        tableView.reloadData()
     }
 
 }

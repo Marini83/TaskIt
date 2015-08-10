@@ -8,22 +8,24 @@
 
 import UIKit
 
-class TaskDetailViewController: UIViewController {
+@objc protocol TaskDetailViewControllerDelegate {
+    optional func taskDetailEdited()
+}
 
-    
+class TaskDetailViewController: UIViewController {
     
     @IBOutlet weak var subtaskTextField: UITextField!
     
     @IBOutlet weak var dueDatePicker: UIDatePicker!
-    @IBOutlet weak var taskTextField: UITextField!
     
+    @IBOutlet weak var taskTextField: UITextField!
+    var delegate:TaskDetailViewControllerDelegate?
     var detailTaskModel: TaskModel!
     
     override func viewDidLoad() {
         super.viewDidLoad()
-//        if taskTextField.returnKeyType == UIReturnKeyType() {
-//            self.taskTextField.resignFirstResponder()
-//        }
+        self.view.backgroundColor = UIColor(patternImage: UIImage(named: "Background")!)
+
         self.taskTextField.text = detailTaskModel.task
         self.subtaskTextField.text = detailTaskModel.subtask
         self.dueDatePicker.date = detailTaskModel.date
@@ -43,14 +45,16 @@ class TaskDetailViewController: UIViewController {
     }
 
     @IBAction func doneBarButtonItemPressed(sender: UIBarButtonItem) {
-        let appDelegate = (UIApplication.sharedApplication().delegate as AppDelegate)
         
         detailTaskModel.task = taskTextField.text
         detailTaskModel.subtask = subtaskTextField.text
         detailTaskModel.date = dueDatePicker.date
         detailTaskModel.completed = detailTaskModel.completed
         
-        appDelegate.saveContext()
+        ModelManager.instance.saveContext()
+        
         self.navigationController?.popViewControllerAnimated(true)
+        // implement the protocol
+         delegate?.taskDetailEdited!()
     }
 }
